@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu - Simple RMS</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand"><div class="brand-logo">🍽</div> Simple RMS</div>
+    <nav class="tabs">
+        <button class="tab active" data-view="menu">Menu</button>
+        <button class="tab" data-view="cart">Cart <span class="badge-count" id="cartCount">0</span></button>
+        <button class="tab" data-view="orders">My Orders</button>
+    </nav>
+    <div class="topbar-right">
+        <span class="user-chip">Hi, <b data-username></b></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+    </div>
+</header>
+
+<main class="container">
+    <!-- MENU -->
+    <section id="view-menu">
+        <div class="page-header">
+            <div>
+                <h1>Our Menu</h1>
+                <p class="muted">Pick your favourites and add them to the cart</p>
+            </div>
+        </div>
+        <div class="filters" id="filters"></div>
+        <div class="menu-grid" id="menuGrid"></div>
+    </section>
+
+    <!-- CART -->
+    <section id="view-cart" class="hidden">
+        <div class="page-header"><h1>Your Cart</h1></div>
+        <div class="cart-layout">
+            <div class="panel" id="cartItems"></div>
+            <div class="panel">
+                <h3 style="margin-bottom:14px">Order Summary</h3>
+                <div class="summary-row"><span class="muted">Items</span><span id="sumItems">0</span></div>
+                <div class="summary-row summary-total"><span>Total</span><span id="sumTotal">$0.00</span></div>
+                <button class="btn btn-accent btn-block" id="confirmBtn" onclick="confirmOrder()">Confirm Order</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- MY ORDERS -->
+    <section id="view-orders" class="hidden">
+        <div class="page-header">
+            <h1>My Orders</h1>
+            <button class="btn btn-outline btn-sm" onclick="loadOrders()">↻ Refresh</button>
+        </div>
+        <div class="order-list" id="orderList"></div>
+    </section>
+</main>
+
+<script src="js/common.js"></script>
+<script>
+    const user = requireRole("customer");
+    const cartKey = "cart_" + (user && user.id);
+
+    let menu = [];
+    let category = "All";
+    const pickQty = {};   // number shown on each card (between - and +)
+    let cart = JSON.parse(localStorage.getItem(cartKey) || "{}");   // { menuItemId: quantity }
+
+    // ---------- Tabs ----------
+    document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => showView(tab.dataset.view)));
+
+    function showView(view) {
+        document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === view));
+        ["menu", "cart", "orders"].forEach(v => document.getElementById("view-" + v).classList.toggle("hidden", v !== view));
+        if (view === "cart") renderCart();
+        if (view === "orders") loadOrders();
+    }
+
+    // ---------- Menu ----------
+    async function loadMenu() {
+        menu = await api("/api/menu");
+        menu.forEach(m => pickQty[m.id] = 1);
+        renderFilters();
+        renderMenu();
+        updateCartCount();
+    }
+
+    function renderFilters() {
+        const categories = ["All", ...new Set(menu.map(m => m.category))];
+        document.getElementById("filters").innerHTML = categories.map(c =>
+            `<button class="chip ${c === category ? "active" : ""}" onclick="setCategory('${c}')">${esc(c)}</button>`).join("");
+    }
+
+    function setCategory(c) {
+        category = c;
+        renderFilters();
+        renderMenu();
+    }
+
+    function renderMenu() {
+        const items = menu.filter(m => category === "All" || m.category === category);
+        document.getElementById("menuGrid").innerHTML = items.map(m => `
+            <div class="food-card">
+                <img src="${m.imageUrl}" alt="${esc(m.name)}" onerror="this.src=FALLBACK_IMAGE">
+                <div class="food-body">
+                    <div class="food-category">${esc(m.category)}</div>
+                    <div class="food-top">
+                        <div class="food-name">${esc(m.name)}</div>
+                        <div class="food-price">${money(m.price)}</div>
+                    </div>
+                    <p class="food-desc">${esc(m.description)}</p>
+                    <div class="qty">
+                        <button onclick="changePick(${m.id}, -1)">−</button>
+                        <span id="pick-${m.id}">${pickQty[m.id]}</span>
+                        <button onclick="changePick(${m.id}, 1)">+</button>
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="addToCart(${m.id})">Add to Cart</button>
+                </div>
+            </div>`).join("");
+    }
+
+    function changePick(id, delta) {
+        pickQty[id] = Math.max(1, pickQty[id] + delta);
+        document.getElementById("pick-" + id).textContent = pickQty[id];
+    }
+
+    // ---------- Cart ----------
+    function saveCart() {
+        localStorage.setItem(cartKey, JSON.stringify(cart));
+        updateCartCount();
+    }
+
+    function updateCartCount() {
+        document.getElementById("cartCount").textContent = Object.values(cart).reduce((a, b) => a + b, 0);
+    }
+
+    function addToCart(id) {
+        cart[id] = (cart[id] || 0) + pickQty[id];
+        saveCart();
+        const item = menu.find(m => m.id === id);
+        toast(`${pickQty[id]} × ${item.name} added to cart`);
+        pickQty[id] = 1;
+        document.getElementById("pick-" + id).textContent = 1;
+    }
+
+    function changeCart(id, delta) {
+        cart[id] = (cart[id] || 0) + delta;
+        if (cart[id] <= 0) delete cart[id];
+        saveCart();
+        renderCart();
+    }
+
+    function removeFromCart(id) {
+        delete cart[id];
+        saveCart();
+        renderCart();
+    }
+
+    function renderCart() {
+        const rows = Object.keys(cart)
+            .map(id => ({ item: menu.find(m => m.id == id), qty: cart[id] }))
+            .filter(r => r.item);
+
+        const box = document.getElementById("cartItems");
+        if (rows.length === 0) {
+            box.innerHTML = `<div class="empty">Your cart is empty.<br><br>
+                <button class="btn btn-primary" onclick="showView('menu')">Browse Menu</button></div>`;
+        } else {
+            box.innerHTML = rows.map(r => `
+                <div class="cart-row">
+                    <img src="${r.item.imageUrl}" alt="" onerror="this.src=FALLBACK_IMAGE">
+                    <div class="info">
+                        <div class="food-name">${esc(r.item.name)}</div>
+                        <div class="muted">${money(r.item.price)} each</div>
+                    </div>
+                    <div class="qty">
+                        <button onclick="changeCart(${r.item.id}, -1)">−</button>
+                        <span>${r.qty}</span>
+                        <button onclick="changeCart(${r.item.id}, 1)">+</button>
+                    </div>
+                    <div class="line-total">${money(r.item.price * r.qty)}</div>
+                    <button class="btn btn-danger btn-sm" onclick="removeFromCart(${r.item.id})">✕</button>
+                </div>`).join("");
+        }
+
+        const count = rows.reduce((s, r) => s + r.qty, 0);
+        const total = rows.reduce((s, r) => s + r.qty * r.item.price, 0);
+        document.getElementById("sumItems").textContent = count;
+        document.getElementById("sumTotal").textContent = money(total);
+        document.getElementById("confirmBtn").disabled = rows.length === 0;
+    }
+
+    async function confirmOrder() {
+        const items = Object.keys(cart).map(id => ({ menuItemId: Number(id), quantity: cart[id] }));
+        try {
+            const result = await api("/api/orders", "POST", { userId: user.id, items });
+            cart = {};
+            saveCart();
+            toast(`Order #${result.id} placed!`);
+            showView("orders");
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    // ---------- My Orders ----------
+    async function loadOrders() {
+        const orders = await api("/api/orders?userId=" + user.id);
+        const list = document.getElementById("orderList");
+
+        if (orders.length === 0) {
+            list.innerHTML = `<div class="panel empty">You haven't placed any orders yet.</div>`;
+            return;
+        }
+        list.innerHTML = orders.map(o => `
+            <div class="order-card">
+                <div class="order-head">
+                    <div>
+                        <div class="order-id">Order #${o.id}</div>
+                        <div class="muted" style="font-size:13px">${esc(o.createdAt)}</div>
+                    </div>
+                    ${statusBadge(o.status)}
+                </div>
+                <div class="order-items">${esc(itemsSummary(o.items))}</div>
+                <div class="order-foot">
+                    <span class="muted">${o.items.reduce((s, i) => s + i.quantity, 0)} item(s)</span>
+                    <b>${money(o.total)}</b>
+                </div>
+            </div>`).join("");
+    }
+
+    // Keep order statuses fresh while the "My Orders" tab is open
+    setInterval(() => {
+        if (!document.getElementById("view-orders").classList.contains("hidden")) loadOrders();
+    }, 10000);
+
+    if (user) loadMenu();
+</script>
+</body>
+</html>

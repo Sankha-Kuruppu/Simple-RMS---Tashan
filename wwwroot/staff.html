@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff - Simple RMS</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand"><div class="brand-logo">🍽</div> Simple RMS <span class="muted" style="font-size:14px;font-weight:600">· Staff</span></div>
+    <div class="topbar-right">
+        <a href="admin.html" id="backToAdmin" class="btn btn-outline btn-sm hidden">← Admin Dashboard</a>
+        <span class="user-chip">Logged in as <b data-username></b></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+    </div>
+</header>
+
+<main class="container">
+    <div class="page-header">
+        <div>
+            <h1>Orders</h1>
+            <p class="muted">Update order status or edit an order's items</p>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadOrders()">↻ Refresh</button>
+    </div>
+
+    <div class="filters" id="filters"></div>
+
+    <div class="panel table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Items</th>
+                    <th>Total</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="ordersBody"></tbody>
+        </table>
+    </div>
+</main>
+
+<!-- Edit order popup -->
+<div class="modal-bg hidden" id="editModal">
+    <div class="modal">
+        <div class="modal-head">
+            <h2 id="editTitle">Edit Order</h2>
+            <button class="btn btn-outline btn-sm" onclick="closeEdit()">✕</button>
+        </div>
+        <div id="editItems"></div>
+        <div class="add-row">
+            <select class="input" id="addSelect"></select>
+            <button class="btn btn-primary" onclick="addEditItem()">+ Add Item</button>
+        </div>
+        <div class="modal-foot">
+            <div>Total: <b id="editTotal" style="font-size:18px;color:var(--primary)"></b></div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-outline" onclick="closeEdit()">Cancel</button>
+                <button class="btn btn-accent" onclick="saveEdit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+    const user = requireRole("staff", "admin");
+    if (user && user.role === "admin") document.getElementById("backToAdmin").classList.remove("hidden");
+
+    const statuses = ["All", "Pending", "Processing", "Done", "Cancelled"];
+    let filter = "All";
+    let orders = [];
+    let menu = [];
+    let editing = null;   // { id, items: [{ menuItemId, name, price, quantity }] }
+
+    // ---------- Orders list ----------
+    async function loadOrders() {
+        orders = await api("/api/orders");
+        renderFilters();
+        renderOrders();
+    }
+
+    function renderFilters() {
+        document.getElementById("filters").innerHTML = statuses.map(s => {
+            const count = s === "All" ? orders.length : orders.filter(o => o.status === s).length;
+            return `<button class="chip ${s === filter ? "active" : ""}" onclick="setFilter('${s}')">${s} (${count})</button>`;
+        }).join("");
+    }
+
+    function setFilter(s) {
+        filter = s;
+        renderFilters();
+        renderOrders();
+    }
+
+    function renderOrders() {
+        const list = orders.filter(o => filter === "All" || o.status === filter);
+        const body = document.getElementById("ordersBody");
+
+        if (list.length === 0) {
+            body.innerHTML = `<tr><td colspan="7" class="empty">No orders here.</td></tr>`;
+            return;
+        }
+
+        body.innerHTML = list.map(o => {
+            const open = o.status === "Pending" || o.status === "Processing";
+            return `
+            <tr>
+                <td><b>#${o.id}</b></td>
+                <td>${esc(o.customer)}</td>
+                <td style="max-width:280px">${esc(itemsSummary(o.items))}</td>
+                <td><b>${money(o.total)}</b></td>
+                <td class="muted">${esc(o.createdAt)}</td>
+                <td>${statusBadge(o.status)}</td>
+                <td>
+                    <div class="actions">
+                        ${o.status === "Pending" ? `<button class="btn btn-outline btn-sm" onclick="setStatus(${o.id}, 'Processing')">Processing</button>` : ""}
+                        ${open ? `<button class="btn btn-success btn-sm" onclick="setStatus(${o.id}, 'Done')">Done</button>` : ""}
+                        ${open ? `<button class="btn btn-danger btn-sm" onclick="setStatus(${o.id}, 'Cancelled')">Cancel</button>` : ""}
+                        ${open ? `<button class="btn btn-primary btn-sm" onclick="openEdit(${o.id})">Edit</button>` : ""}
+                        ${!open ? `<span class="muted" style="font-size:13px">No actions</span>` : ""}
+                    </div>
+                </td>
+            </tr>`;
+        }).join("");
+    }
+
+    async function setStatus(id, status) {
+        if (status === "Cancelled" && !confirm(`Cancel order #${id}?`)) return;
+        try {
+            await api(`/api/orders/${id}/status`, "PUT", { status });
+            toast(`Order #${id} marked as ${status}`);
+            loadOrders();
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    // ---------- Edit order ----------
+    function openEdit(id) {
+        const order = orders.find(o => o.id === id);
+        editing = { id, items: order.items.map(i => ({ ...i })) };
+        document.getElementById("editTitle").textContent = `Edit Order #${id}`;
+        document.getElementById("addSelect").innerHTML = menu.map(m =>
+            `<option value="${m.id}">${esc(m.name)} — ${money(m.price)}</option>`).join("");
+        renderEdit();
+        document.getElementById("editModal").classList.remove("hidden");
+    }
+
+    function closeEdit() {
+        editing = null;
+        document.getElementById("editModal").classList.add("hidden");
+    }
+
+    function renderEdit() {
+        const box = document.getElementById("editItems");
+        box.innerHTML = editing.items.length === 0
+            ? `<div class="empty">No items. Add one below.</div>`
+            : editing.items.map((i, index) => `
+                <div class="cart-row">
+                    <div class="info">
+                        <div class="food-name">${esc(i.name)}</div>
+                        <div class="muted">${money(i.price)} each</div>
+                    </div>
+                    <div class="qty">
+                        <button onclick="changeEditQty(${index}, -1)">−</button>
+                        <span>${i.quantity}</span>
+                        <button onclick="changeEditQty(${index}, 1)">+</button>
+                    </div>
+                    <div class="line-total">${money(i.price * i.quantity)}</div>
+                    <button class="btn btn-danger btn-sm" onclick="removeEditItem(${index})">✕</button>
+                </div>`).join("");
+
+        const total = editing.items.reduce((s, i) => s + i.price * i.quantity, 0);
+        document.getElementById("editTotal").textContent = money(total);
+    }
+
+    function changeEditQty(index, delta) {
+        editing.items[index].quantity = Math.max(1, editing.items[index].quantity + delta);
+        renderEdit();
+    }
+
+    function removeEditItem(index) {
+        editing.items.splice(index, 1);
+        renderEdit();
+    }
+
+    function addEditItem() {
+        const id = Number(document.getElementById("addSelect").value);
+        const existing = editing.items.find(i => i.menuItemId === id);
+        if (existing) {
+            existing.quantity++;
+        } else {
+            const m = menu.find(m => m.id === id);
+            editing.items.push({ menuItemId: m.id, name: m.name, price: m.price, quantity: 1 });
+        }
+        renderEdit();
+    }
+
+    async function saveEdit() {
+        const id = editing.id;
+        try {
+            await api(`/api/orders/${id}/items`, "PUT", {
+                items: editing.items.map(i => ({ menuItemId: i.menuItemId, quantity: i.quantity }))
+            });
+            closeEdit();
+            toast(`Order #${id} updated`);
+            loadOrders();
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    // ---------- Start ----------
+    async function start() {
+        menu = await api("/api/menu");
+        await loadOrders();
+        // Check for new orders every 10 seconds (but not while editing)
+        setInterval(() => { if (!editing) loadOrders(); }, 10000);
+    }
+
+    if (user) start();
+</script>
+</body>
+</html>

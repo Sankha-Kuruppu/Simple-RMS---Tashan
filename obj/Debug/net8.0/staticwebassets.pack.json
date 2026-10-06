@@ -1,0 +1,45 @@
+{
+  "Files": [
+    {
+      "Id": "C:\\Users\\Sanka\\Projects\\Simple RMS - Tashan\\wwwroot\\admin.html",
+      "PackagePath": "staticwebassets\\admin.html"
+    },
+    {
+      "Id": "C:\\Users\\Sanka\\Projects\\Simple RMS - Tashan\\wwwroot\\css\\style.css",
+      "PackagePath": "staticwebassets\\css\\style.css"
+    },
+    {
+      "Id": "C:\\Users\\Sanka\\Projects\\Simple RMS - Tashan\\wwwroot\\customer.html",
+      "PackagePath": "staticwebassets\\customer.html"
+    },
+    {
+      "Id": "C:\\Users\\Sanka\\Projects\\Simple RMS - Tashan\\wwwroot\\index.html",
+      "PackagePath": "staticwebassets\\index.html"
+    },
+    {
+      "Id": "C:\\Users\\Sanka\\Projects\\Simple RMS - Tashan\\wwwroot\\js\\common.js",
+      "PackagePath": "staticwebassets\\js\\common.js"
+    },
+    {
+      "Id": "C:\\Users\\Sanka\\Projects\\Simple RMS - Tashan\\wwwroot\\staff.html",
+      "PackagePath": "staticwebassets\\staff.html"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.SimpleRMS.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.build.SimpleRMS.props",
+      "PackagePath": "build\\SimpleRMS.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.SimpleRMS.props",
+      "PackagePath": "buildMultiTargeting\\SimpleRMS.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildTransitive.SimpleRMS.props",
+      "PackagePath": "buildTransitive\\SimpleRMS.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Simple RMS</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand"><div class="brand-logo">🍽</div> Simple RMS <span class="muted" style="font-size:14px;font-weight:600">· Admin</span></div>
+    <div class="topbar-right">
+        <a href="staff.html" class="btn btn-accent btn-sm">Go to Staff Screen →</a>
+        <span class="user-chip">Logged in as <b data-username></b></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+    </div>
+</header>
+
+<main class="container">
+    <div class="page-header">
+        <div>
+            <h1>Dashboard</h1>
+            <p class="muted">Overview of orders and revenue</p>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadStats()">↻ Refresh</button>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card accent">
+            <div class="stat-label">Total Revenue</div>
+            <div class="stat-value" id="revenue">–</div>
+            <div class="stat-sub">From completed orders</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Orders</div>
+            <div class="stat-value" id="totalOrders">–</div>
+            <div class="stat-sub">All time</div>
+        </div>
+        <div class="stat-card accent">
+            <div class="stat-label">Today's Revenue</div>
+            <div class="stat-value" id="todayRevenue">–</div>
+            <div class="stat-sub" id="todayOrders"></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Orders</div>
+            <div class="stat-value" id="activeOrders">–</div>
+            <div class="stat-sub">Pending + Processing</div>
+        </div>
+    </div>
+
+    <div class="two-col">
+        <div class="panel">
+            <h3 style="margin-bottom:16px">Orders by Status</h3>
+            <div id="statusBars"></div>
+        </div>
+        <div class="panel">
+            <h3 style="margin-bottom:10px">Top Selling Items</h3>
+            <table class="table">
+                <thead><tr><th>Item</th><th>Qty Sold</th><th>Sales</th></tr></thead>
+                <tbody id="topItems"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel table-wrap">
+        <div class="page-header" style="margin-bottom:8px">
+            <h3>Recent Orders</h3>
+            <a href="staff.html" class="btn btn-outline btn-sm">Manage orders →</a>
+        </div>
+        <table class="table">
+            <thead><tr><th>Order ID</th><th>Customer</th><th>Items</th><th>Total</th><th>Time</th><th>Status</th></tr></thead>
+            <tbody id="recentOrders"></tbody>
+        </table>
+    </div>
+</main>
+
+<script src="js/common.js"></script>
+<script>
+    const user = requireRole("admin");
+
+    async function loadStats() {
+        const s = await api("/api/stats");
+
+        document.getElementById("revenue").textContent = money(s.revenue);
+        document.getElementById("totalOrders").textContent = s.totalOrders;
+        document.getElementById("todayRevenue").textContent = money(s.todayRevenue);
+        document.getElementById("todayOrders").textContent = `${s.todayOrders} order(s) today`;
+        document.getElementById("activeOrders").textContent = s.pending + s.processing;
+
+        // Status bars
+        const rows = [
+            ["Pending", s.pending, "#e8833a"],
+            ["Processing", s.processing, "#1e3a5f"],
+            ["Done", s.done, "#1e8449"],
+            ["Cancelled", s.cancelled, "#c0392b"]
+        ];
+        const max = Math.max(1, s.totalOrders);
+        document.getElementById("statusBars").innerHTML = rows.map(([label, count, color]) => `
+            <div class="bar-row">
+                <div class="bar-label"><span>${label}</span><b>${count}</b></div>
+                <div class="bar"><div style="width:${count / max * 100}%;background:${color}"></div></div>
+            </div>`).join("");
+
+        // Top items
+        document.getElementById("topItems").innerHTML = s.topItems.length === 0
+            ? `<tr><td colspan="3" class="muted">No sales yet.</td></tr>`
+            : s.topItems.map(i => `<tr><td>${esc(i.name)}</td><td>${i.quantity}</td><td>${money(i.amount)}</td></tr>`).join("");
+
+        // Recent orders
+        document.getElementById("recentOrders").innerHTML = s.recentOrders.length === 0
+            ? `<tr><td colspan="6" class="muted">No orders yet.</td></tr>`
+            : s.recentOrders.map(o => `
+                <tr>
+                    <td><b>#${o.id}</b></td>
+                    <td>${esc(o.customer)}</td>
+                    <td style="max-width:300px">${esc(itemsSummary(o.items))}</td>
+                    <td><b>${money(o.total)}</b></td>
+                    <td class="muted">${esc(o.createdAt)}</td>
+                    <td>${statusBadge(o.status)}</td>
+                </tr>`).join("");
+    }
+
+    if (user) {
+        loadStats();
+        setInterval(loadStats, 15000);
+    }
+</script>
+</body>
+</html>

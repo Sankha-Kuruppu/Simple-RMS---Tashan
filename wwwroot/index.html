@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Simple RMS</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="login-page">
+    <div class="login-side">
+        <div class="accent-line"></div>
+        <h1>Simple RMS</h1>
+        <p>Order food, manage the kitchen and track your restaurant's performance — all in one place.</p>
+    </div>
+
+    <div class="login-form-wrap">
+        <form class="login-form" id="loginForm">
+            <h2>Welcome back</h2>
+            <p class="muted">Sign in to continue</p>
+
+            <div id="error" class="error-msg hidden"></div>
+
+            <div class="form-group">
+                <label>Login as</label>
+                <div class="role-picker">
+                    <input type="radio" name="role" id="roleCustomer" value="customer" checked>
+                    <label for="roleCustomer">Customer</label>
+                    <input type="radio" name="role" id="roleStaff" value="staff">
+                    <label for="roleStaff">Staff</label>
+                    <input type="radio" name="role" id="roleAdmin" value="admin">
+                    <label for="roleAdmin">Admin</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input class="input" id="username" required autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input class="input" id="password" type="password" required autocomplete="current-password">
+            </div>
+
+            <button class="btn btn-primary btn-block" type="submit">Login</button>
+
+            <div class="demo-logins">
+                <b>Demo accounts</b><br>
+                Customer: john / john123 &nbsp;·&nbsp; mary / mary123<br>
+                Staff: staff / staff123<br>
+                Admin: admin / admin123
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+    const pages = { customer: "customer.html", staff: "staff.html", admin: "admin.html" };
+
+    // Already logged in? Go straight to the right page
+    const existing = getUser();
+    if (existing) window.location.href = pages[existing.role];
+
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const errorBox = document.getElementById("error");
+        errorBox.classList.add("hidden");
+
+        try {
+            const user = await api("/api/login", "POST", {
+                username: document.getElementById("username").value.trim(),
+                password: document.getElementById("password").value,
+                role: document.querySelector("input[name=role]:checked").value
+            });
+            sessionStorage.setItem("user", JSON.stringify(user));
+            window.location.href = pages[user.role];
+        } catch (err) {
+            errorBox.textContent = err.message;
+            errorBox.classList.remove("hidden");
+        }
+    });
+</script>
+</body>
+</html>
